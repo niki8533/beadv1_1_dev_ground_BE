@@ -291,6 +291,7 @@ public class PaymentServiceImpl implements PaymentService {
 	}
 
 	@Override
+	@Transactional
 	public void applyDepositPayment(String orderCode) {
 		Payment payment = getByOrderCode(orderCode);
 		payment.setPaymentStatus(PaymentStatus.PAYMENT_COMPLETED);
