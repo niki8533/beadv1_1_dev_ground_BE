@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -54,12 +55,13 @@ public class LoginEssentialFilter extends AbstractGatewayFilterFactory<LoginEsse
 			ServerHttpRequest request = exchange.getRequest();
 			ServerHttpResponse response = exchange.getResponse();
 
+			// access, refresh 둘 다 없음 = 로그인한 적 없는 사용자 → 401로 로그인 안내
 			if (!request.getHeaders().containsKey("access") && !request.getCookies()
 				.containsKey("refresh")) {
 
-				log.error("토큰 혹은 쿠키가 비어있습니다!");
+				log.info("로그인하지 않은 사용자의 접근입니다.");
 
-				return chain.filter(exchange);
+				return response.writeWith(Flux.just(writeUnauthorizedResponseBody(response)));
 			}
 
 			Optional<String> tokenOptional = resolveToken(request);
@@ -96,6 +98,20 @@ public class LoginEssentialFilter extends AbstractGatewayFilterFactory<LoginEsse
 			return chain.filter(exchange.mutate().request(mutatedRequest).build());
 
 		};
+	}
+
+	private DataBuffer writeUnauthorizedResponseBody(ServerHttpResponse response) {
+		response.setStatusCode(HttpStatus.UNAUTHORIZED);
+		response.getHeaders().add(HttpHeaders.CONTENT_TYPE, "application/json");
+
+		BaseResponse<Object> body = BaseResponse.fail(401, "로그인이 필요합니다.");
+
+		try {
+			return response.bufferFactory().wrap(om.writeValueAsBytes(body));
+		} catch (JsonProcessingException e) {
+			log.error("Serialization 오류");
+			throw new RuntimeException(e);
+		}
 	}
 
 	private Optional<String> resolveToken(ServerHttpRequest request) {
